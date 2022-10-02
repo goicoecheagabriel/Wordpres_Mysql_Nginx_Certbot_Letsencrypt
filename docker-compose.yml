@@ -1,0 +1,89 @@
+version: '3'
+
+services:
+  wp:
+  container_name: trapstardeluxe
+  image: igoikoetxea/wordpress-sendmail-pdo:latest
+  ports:
+    - 81:80 # Cambiar la IP si es requerido
+  volumes:
+    - ./config/php.conf.uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+    - trapstardeluxe_front_data:/var/www/html # Full wordpress project
+  environment:
+    WORDPRESS_DB_HOST: db
+    WORDPRES_DB_NAME: "${DB_NAME}"
+    WORDPRESS_DB_USER: root
+    WORDPRESS_DB_PASSWORD: "$(DB_ROOT_PASSWORD)"
+    VIRTUAL_PORT: 81
+  depends_on:
+    - db
+  
+  wpcli:
+    image: wordpress:cli
+    user: xfs
+    volumes:
+      - trapstardeluxe_front_data:/var/www/html # Full wordpress project
+    depends_on:
+      - db
+      - wp
+
+  db:
+    container_name: db
+    image: mysql:latest # https://hub.docker.com/_/mysql/ - or mariadb https://hub.docker.com/_/mariadb
+    ports:
+      - 3306:3306 # Cambiar la IP si es requerido
+    command: [
+      '--default_authentication_plugin=mysql_native_password',
+      '--character-set-server=utf8mb4',
+      '--collation-server=utf8mb4_unicode_ci'
+    ]
+    volumes:
+      - ./wp-data:/docker-entrypoint-initdb.d
+      - trapstardeluxe_db_data:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: "${DB_NAME}"
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+
+  nginx:
+    image: nginx:1.15-alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./data/nginx:/etc/nginx/conf.d
+      - trapstardeluxe_front_data:/var/www/html:rw #wordpress cristiancasis.com
+      # - ./data/certbot/conf:/etc/letsencrypt
+      # - ./data/certbot/www:/var/www/certbot
+      - ./letsencrypt/conf:/etc/letsencrypt
+
+  certbot:
+    container_name: certboot
+    image: certbot/certbot
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+
+  letsencrypt:
+    restart: always
+    image: vdhpieter/letsencrypt-webroot
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./letsencrypt/conf:/etc/letsencrypt
+      - ./letsencrypt/html:/tmp/letsencrypt
+      - trapstardeluxe_front_data:/var/www/html
+    links:
+      - nginx
+    environment:
+      - DOMAINS=trapstardeluxe.store www.trapstardeluxe.store
+      - EMAIL=goicoecheagabriel@gmail.com
+      - WEBROOT_PATH=/var/www/html
+      - EXP_LIMIT=30
+      - CHECK_FREQ=30
+      - CHICKENEGG=1
+      - STAGING=0
+
+volumes:
+  trapstardeluxe_db_data:
+  trapstardeluxe_front_data:
